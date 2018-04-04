@@ -3,6 +3,7 @@
 #include <string>
 #include <random>
 #include <algorithm>
+#include <parallel/algorithm>
 #include <stdio.h>      /* printf */
 #include <stdlib.h>
 #include <cstdio>
@@ -95,7 +96,8 @@ std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num
    }
   
    // sort total samples
-   std::sort(all_samples, all_samples + num_samples);
+   __gnu_parallel::sort(all_samples, all_samples + num_samples);
+   //std::sort(all_samples, all_samples + num_samples);
 
    // Determine partition values
    std::vector<int> partitions; 
@@ -134,9 +136,9 @@ int main () {
   double duration;
   start = std::clock();
 
-  int num_records = 1000;
+  int num_records = 1000000;
   int num_workers = 1;
-  int num_samples = 100;
+  int num_samples = 1000;
   int num_partitions = 5;
   std::string filename = "file";
   call_generate_input_data(num_records, filename, 1);
