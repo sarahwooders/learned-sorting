@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <stdio.h>      /* printf */
 #include <stdlib.h>
+#include <cstdio>
+#include <ctime>
 #include "read.cpp"
 
 
@@ -44,9 +46,10 @@ void generate_random_subset(int * indices, int subset_size, int n) {
 
 void read_file(int * data, std::string filename, int n) {
     read_gensort(data, n, filename);
-    for(int i = 0; i < n; i ++) {
-        std::cout << data[i] << std::endl;
-    }
+    //for(int i = 0; i < n; i ++) {
+    //    std::cout << data[i] << " ";
+    //}
+    //std::cout << std::endl << std::endl << "READ DONE" << std::endl;
 }
 
 void collect_samples(int * data, int * samples, int data_n, int samples_n) {
@@ -60,10 +63,8 @@ void collect_samples(int * data, int * samples, int data_n, int samples_n) {
 }
 
 /*
-  num_samples: number of records PER worker
-  num_samples: number of samples PER worker (total = num_workers * num_samples)
 */
-std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num_workers, int num_pertitions, std::string filename) {
+std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num_workers, int num_partitions, std::string filename) {
    
    int * all_samples = new int[num_samples]; 
    int index = 0; 
@@ -72,8 +73,11 @@ std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num
    int records_per_worker = num_records/num_workers;
 
    // Collect samples from all files/workers
+
+   #pragma omp parallel
+   #pragma omp for
    for(int i = 0; i < num_workers; i ++) {
-     std::string file = filename + std::to_string(id);
+     std::string file = filename + std::to_string(i);
      int * data = new int[records_per_worker];
      int * samples = new int[samples_per_worker];
  
@@ -96,38 +100,65 @@ std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num
    // Determine partition values
    std::vector<int> partitions; 
    int partition_size = num_samples/num_partitions;
-   for(int i = 0; i < num_samples; i += partition_size) {
-      partitions.push_back(all_samples[i];
+   for(int i = partition_size; i < num_samples; i += partition_size) {
+      std::cout << " HERE " << i << " " ;
+      partitions.push_back(all_samples[i]);
    }
    
    return partitions;
 }
 
-void create_range_files(int num_samples, int num_records, std::string filename, int id) {
-  std::string file = filename + std::to_string(id);
-  int * data = new int[num_records];
-  int * samples = new int[num_samples];
+void test_partitions(int * sorted_data, int n, std::vector<int> partitions) { 
 
-  // Read the file for the process
-  read_file(data, file, num_records); 
- 
-  //Collect the samples from the data
-  collect_samples(data, samples, num_records, num_samples);
+    int p_index = 0;
+    int p_size = partitions.size() + 1;
+    std::cout << "SIZE " << p_size << " " << partitions.size() << std::endl;
+    int * count = new int[p_size]; 
+    for(int i = 0; i < p_size; i ++) count[i] = 0;
+    for(int i = 0; i < n; i ++) {
+      while(sorted_data[i] > partitions[p_index] && p_index < partitions.size()) {
+        p_index++;
+        std::cout << "index " << p_index << " " << partitions[p_index] << std::endl;
+      }
+     
 
-   //write samples
-  std::string output_file = file + std::to_string(id);
-  write(samples, output_file);
-
+      count[p_index]++;
+    }
+    std::cout << "PARTITION COUNTS " << std::endl;
+    for(int i = 0; i < p_size; i ++) std::cout << count[i] << " " << std::endl;
 }
-
   
 
 int main () {
-  int n = 100;
+  std::clock_t start;
+  double duration;
+  start = std::clock();
+
+  int num_records = 1000;
+  int num_workers = 1;
+  int num_samples = 100;
+  int num_partitions = 5;
   std::string filename = "file";
-  int * data = new int[n];
-  call_generate_input_data(n, filename, 1);
-  read_file(data, filename, n);
+  call_generate_input_data(num_records, filename, 1);
+
+  std::vector<int> partitions = pick_range_boundaries(num_samples, num_records, num_workers, num_partitions, filename);
+
+
+  std::cout << std::endl << "PARTITIONS \n";
+  for(int i = 0; i < partitions.size(); i ++) std::cout << partitions[i] << " ";
+  std::cout << std::endl; 
+
+  duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
+  std::cout<<"printf: "<< duration <<'\n';
+
+
+  /* TESTS */
+  //int * data = new int[num_records];
+  //read_file(data, filename + "0", num_records);
+  //std::sort(data, data + num_records);
+  //test_partitions(data, num_records, partitions);
+
+  
   //std::ifstream is ("file.dat", std::ifstream::binary);
   //if (is) {
   //  // Determine the file length

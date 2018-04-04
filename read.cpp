@@ -8,7 +8,6 @@ void read_gensort(int arr[], int n, std::string filename) {
   std::ifstream is (filename, std::ifstream::binary);
   if (is) {
     
-    std::ofstream output;
     //output.open ("gensort.csv");
     is.seekg (0, is.end);
     int length = is.tellg();
@@ -18,22 +17,22 @@ void read_gensort(int arr[], int n, std::string filename) {
     //int * buffer = new int [100];
     // allocate memory:
     int i = 0;
-    std::cout << "len " << length << std::endl;
-    while(i < length - 100) {
+    //std::cout << "len " << length << std::endl;
+    int count = 0;
+    while(i <= length - 100) {
         is.read (buffer, 100);
         //std::cout.write (buffer, 100);
         int myInt = std::abs(*(int*)&buffer[0]);
         //std::cout << myInt << " ";
-        //output << myInt << "\n";
         arr[i/100] = myInt;
         i += 100;
+        count++;
     }
     //std::cout << std::endl;
 
     // read data as a block:
     //is.read (buffer,length);
-    output.close();
-
+    //std::cout << std::endl << std::endl << "COUNT " << count << std::endl << std::endl;
     is.close();
 
     // print content:
@@ -43,12 +42,12 @@ void read_gensort(int arr[], int n, std::string filename) {
   }
 }
 
-void write(int * data, std::string filename) {
-  std::ofstream fout(filename, std::ios_base::trunc | std::ios_base::out | std::ios_base::binary);
-
-  fout.close();
-
-}
+//void write(int * data, std::string filename) {
+//  std::ofstream fout(filename, std::ios_base::trunc | std::ios_base::out | std::ios_base::binary);
+//
+//  fout.close();
+//
+//}
 
 //int main(int argc, char **argv) {
 //  int N;
