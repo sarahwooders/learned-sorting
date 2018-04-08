@@ -16,14 +16,14 @@ void read_gensort(int arr[], int n, std::string filename) {
     char * buffer = new char [100];
     //int * buffer = new int [100];
     // allocate memory:
-    int i = 0;
-    //std::cout << "len " << length << std::endl;
     int count = 0;
+    int i = 0;
+    std::cout << "len " << length << std::endl;
     while(i <= length - 100) {
         is.read (buffer, 100);
         //std::cout.write (buffer, 100);
         int myInt = std::abs(*(int*)&buffer[0]);
-        //std::cout << myInt << " ";
+        if(n <= i/100) printf("Sizes %i %i \n", i/100, n); 
         arr[i/100] = myInt;
         i += 100;
         count++;
@@ -32,13 +32,13 @@ void read_gensort(int arr[], int n, std::string filename) {
 
     // read data as a block:
     //is.read (buffer,length);
-    //std::cout << std::endl << std::endl << "COUNT " << count << std::endl << std::endl;
+    std::cout << std::endl << std::endl << "COUNT " << count << std::endl << std::endl;
     is.close();
 
     // print content:
     //std::cout.write (buffer,length);
 
-    delete[] buffer;
+    //delete[] buffer;
   }
 }
 
