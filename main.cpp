@@ -17,7 +17,8 @@
 
 
 void generate_input_data(std::string filename, int n, int id){
-    std::string command = "./gensort -s " + std::to_string(n) + " " + filename + std::to_string(id);
+    //MAKE SKEWED LATER WITH -s
+    std::string command = "./gensort -b" + std::to_string(n*id) + " " + std::to_string(n) + " " + filename + std::to_string(id);
     std::cout << command << std::endl;
     system(command.c_str());
 }
@@ -55,14 +56,12 @@ void generate_random_subset(int * indices, int subset_size, int n) {
     
 
 void read_file(int * data, std::string filename, int n) {
-    printf("reading file %s\n", filename.c_str());
     read_gensort(data, n, filename);
-    //for(int i = 0; i < n; i ++) {
-    //    std::cout << data[i] << " ";
-    //}
-    //std::cout << std::endl << std::endl << "READ DONE" << std::endl;
 }
 
+/*
+Function for selecting random subset of data (DO NOT USE)
+*/
 void collect_samples(int * data, int * samples, int data_n, int samples_n) {
   int * sample_indices = new int[data_n];
   generate_random_subset(sample_indices, samples_n, data_n); // do I need to do this every time?
@@ -74,6 +73,7 @@ void collect_samples(int * data, int * samples, int data_n, int samples_n) {
 }
 
 /*
+Return vector of range boundary values
 */
 std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num_workers, int num_partitions, std::string filename) {
    
@@ -98,18 +98,16 @@ std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num
      // Read the file for the process
      read_file(data, file, records_per_worker);
  
-
-     printf("COLLECTING SAMPLES\n"); 
      //Collect the samples from the data
-     collect_samples(data, samples, records_per_worker, samples_per_worker);
+     //collect_samples(data, samples, records_per_worker, samples_per_worker);
 
-     printf("ADDING TO ALL SAMPLES\n");
      // Add to total samples array  
-     for(int j = 0; j < num_samples; j ++) {
-       all_samples[i*samples_per_worker + j] = samples[j];
+     for(int j = 0; j < samples_per_worker; j ++) {
+       //printf("data index %i %i %i %i\n", i, j, data[j], i*samples_per_worker + j);
+       all_samples[i*samples_per_worker + j] = data[j];
+       //all_samples[i*samples_per_worker + j] = samples[j];
      }
    }
-   printf("DONE PARALLEL");
   
    // sort total samples
    __gnu_parallel::sort(all_samples, all_samples + num_samples);
@@ -119,12 +117,74 @@ std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num
    std::vector<int> partitions; 
    int partition_size = num_samples/num_partitions;
    for(int i = partition_size; i < num_samples; i += partition_size) {
-      std::cout << " HERE " << i << " " ;
       partitions.push_back(all_samples[i]);
    }
+   //for(int i = 0; i < partitions.size(); i ++) printf("part %i\n",partitions[i]);
    
    return partitions;
 }
+
+void output_ranges(std::vector<int> partitions, std::string filename, int records_per_worker) {
+
+ #pragma omp parallel
+ {
+   int i = omp_get_thread_num();
+   std::string file = filename + std::to_string(i);
+
+
+   //Read data (SHOULD NOT HAVE TO DO THIS AGIAN! REMOVE!
+   read_file(data, file, records_per_worker);
+ 
+
+   // Write data in sepearte partitions to seperate files
+   int num_files = partitions.size() + 1;
+   ofstream *outfiles = new ofstream [num_files];
+   for(int x = 0; x < num_files; x++) {
+     ofstream outfile;
+     std::string outfile_name = filename + std::to_string(i) + "-" + std::to_string(x);  
+     outfile.open(outfile_name);
+     out_files[x] = outfile; 
+   }
+
+   for(int i = 0; i < records_per_worker; i ++) {
+     int index = 0;
+     while(index < partitions.size() && partitions[index] < data[i]) { //CAN BE MADE FASTER (binary search) 
+       index ++;
+     }
+     outfiles[index] << data[i] << "\n";
+   }
+   //Close all open files
+   for(ofstream outfile : outfiles) outfile.close();
+  }
+}
+
+void sort(int *data, int n, int lower, int upper) {
+   //NEED TO DO RANGE PARTITION
+   std::sort(data, data + n);
+}
+
+void write_output(int *data, int n, int id, std::string filename) {
+  std::string file = filename + std::to_string(id);
+  ofstream f;
+  f.open(file);
+  for(int i = 0; i < n; i ++) f << data[n] << "\n";
+  f.close(); 
+}
+
+void validate(int num_workers, std::string filename) {
+  std::string command;
+  std::string cat = "";
+  for(int i = 0; i < num_workers; i ++) {
+    command = "valsort -o " + filename + std::to_string(i) + ".sum " + filename + std::to_string(i) + ".dat";
+    system(command.c_str());
+    cat += filename + std::to_string(i) + ".sum "
+  }
+  command = "cat " + cat + "> all.sum";
+  system(command.c_str());
+  command = "valsort -s all.sum";
+  system(command.c_str());
+}
+    
 
 void test_partitions(int * sorted_data, int n, std::vector<int> partitions) { 
 
@@ -136,60 +196,51 @@ void test_partitions(int * sorted_data, int n, std::vector<int> partitions) {
     for(int i = 0; i < n; i ++) {
       while(sorted_data[i] > partitions[p_index] && p_index < partitions.size()) {
         p_index++;
-        std::cout << "index " << p_index << " " << partitions[p_index] << std::endl;
       }
-     
-
       count[p_index]++;
     }
     std::cout << "PARTITION COUNTS " << std::endl;
-    for(int i = 0; i < p_index; i ++) std::cout << count[i] << " " << std::endl;
+    for(int i = 0; i < p_index; i ++) printf("worker%i load: %i \n", i, count[i]);
 }
 
 int main () {
+
+  /* PARAMETERS */
+  int num_records = 1000000;
+  int num_workers = omp_get_max_threads();
+  int num_samples = 10000;
+  int num_partitions = num_workers;
+  std::string filename = "file";
+ 
+  /* USE GENSORT TO GENERATE INPUT DATA*/
+  call_generate_input_data(num_records, filename, num_workers);
+
+  /* START TIMER */
   std::clock_t start;
   double duration;
   start = std::clock();
 
-  int num_records = 10000;
-  int num_workers = omp_get_max_threads();
-  int num_samples = 1000;
-  int num_partitions = num_workers;
-  std::string filename = "file";
-  call_generate_input_data(num_records, filename, num_workers);
-
-  std::cout << "DATA GENERATED" << std::endl;
+  /* COMPUTE PARTITION VALUES */
   std::vector<int> partitions = pick_range_boundaries(num_samples, num_records, num_workers, num_partitions, filename);
 
+  //for(int i = 0; i < partitions.size(); i ++) std::cout << partitions[i] << " ";
+  //std::cout << std::endl; 
 
-  std::cout << std::endl << "PARTITIONS \n";
-  for(int i = 0; i < partitions.size(); i ++) std::cout << partitions[i] << " ";
-  std::cout << std::endl; 
+  /* SEPERATE DATA INTO RANGE FILES */
+  int records_per_worker = num_records/num_workers + 1;
+  output_ranges(partitions, filename, records_per_worker);
 
   duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
   std::cout<<"printf: "<< duration <<'\n';
 
 
   /* TESTS */
+  printf("\n\n ---------------------------------------------------\n TEST DATA \n ---------------------------------------------------\n");
   int * data = new int[num_records];
   read_file(data, filename + "0", num_records);
   std::sort(data, data + num_records);
   test_partitions(data, num_records, partitions);
 
-  
-  //std::ifstream is ("file.dat", std::ifstream::binary);
-  //if (is) {
-  //  // Determine the file length
-  //  is.seekg(0, std:ios_base::end);
-  //  std::size_t size=is.tellg();
-  //  is.seekg(0, std::ios_base::beg);
-  //  // Create a vector to store the data
-  //  std::vector<float> v(size/sizeof(float));
-  //  // Load the data
-  //  is.read((char*) &v[0], size);
-  //  // Close the file
-  //  is.close();
-  //}
 
   return 0;
 }

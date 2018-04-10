@@ -7,7 +7,6 @@
 void read_gensort(int arr[], int n, std::string filename) {
   std::ifstream is (filename, std::ifstream::binary);
   if (is) {
-    
     //output.open ("gensort.csv");
     is.seekg (0, is.end);
     int length = is.tellg();
@@ -18,7 +17,6 @@ void read_gensort(int arr[], int n, std::string filename) {
     // allocate memory:
     int count = 0;
     int i = 0;
-    std::cout << "len " << length << std::endl;
     while(i <= length - 100) {
         is.read (buffer, 100);
         //std::cout.write (buffer, 100);
@@ -32,7 +30,6 @@ void read_gensort(int arr[], int n, std::string filename) {
 
     // read data as a block:
     //is.read (buffer,length);
-    std::cout << std::endl << std::endl << "COUNT " << count << std::endl << std::endl;
     is.close();
 
     // print content:
