@@ -40,7 +40,6 @@ void call_generate_input_data(int n, std::string filename, int num_workers){
     else {
       generate_input_data(filename, num, i);
     }
-    std::cout << "Worker " << i << " generating " << num << std::endl;
   }
 }
 
@@ -112,6 +111,7 @@ std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num
    // sort total samples
    __gnu_parallel::sort(all_samples, all_samples + num_samples);
    //std::sort(all_samples, all_samples + num_samples);
+  
 
    // Determine partition values
    std::vector<int> partitions; 
@@ -130,7 +130,7 @@ void output_ranges(std::vector<int> partitions, std::string filename, int record
  {
    int i = omp_get_thread_num();
    std::string file = filename + std::to_string(i);
-
+   int * data = new int[records_per_worker];
 
    //Read data (SHOULD NOT HAVE TO DO THIS AGIAN! REMOVE!
    read_file(data, file, records_per_worker);
@@ -138,12 +138,12 @@ void output_ranges(std::vector<int> partitions, std::string filename, int record
 
    // Write data in sepearte partitions to seperate files
    int num_files = partitions.size() + 1;
-   ofstream *outfiles = new ofstream [num_files];
+   std::ofstream outfiles[num_files];
    for(int x = 0; x < num_files; x++) {
-     ofstream outfile;
+     //std::ofstream outfile;
      std::string outfile_name = filename + std::to_string(i) + "-" + std::to_string(x);  
-     outfile.open(outfile_name);
-     out_files[x] = outfile; 
+     //outfile.open(outfile_name);
+     outfiles[x].open(outfile_name); 
    }
 
    for(int i = 0; i < records_per_worker; i ++) {
@@ -154,21 +154,42 @@ void output_ranges(std::vector<int> partitions, std::string filename, int record
      outfiles[index] << data[i] << "\n";
    }
    //Close all open files
-   for(ofstream outfile : outfiles) outfile.close();
+   for(auto& outfile : outfiles) outfile.close();
   }
 }
 
-void sort(int *data, int n, int lower, int upper) {
+void sort(int *data, int n) {
    //NEED TO DO RANGE PARTITION
    std::sort(data, data + n);
 }
 
-void write_output(int *data, int n, int id, std::string filename) {
-  std::string file = filename + std::to_string(id);
-  ofstream f;
+void write_output(int *data, int n, int id, std::string outfile) {
+  std::string file = outfile + std::to_string(id);
+  std::ofstream f;
   f.open(file);
-  for(int i = 0; i < n; i ++) f << data[n] << "\n";
+  for(int i = 0; i < n; i ++) {
+    f << data[n] << "\n";
+  }
   f.close(); 
+}
+
+void sort_ranges(int num_workers, std::string filename, std::string outfile) {
+ #pragma omp parallel
+ {
+   int i = omp_get_thread_num();
+   std::vector<int> data_vec;
+   for(int x = 0; x < num_workers; x ++) {
+     std::string file = filename + std::to_string(x) + "-" + std::to_string(i);
+     std::vector<int> range_data = read_txt(file);
+     for(int r : range_data) data_vec.push_back(r);
+   }
+   int n = data_vec.size();
+   int * data = &data_vec[0];
+ 
+   sort(data, n);
+   printf("WORKER %i PROCESSED %i ITEMS\n", i, n);
+   write_output(data, n, i, outfile);
+ }
 }
 
 void validate(int num_workers, std::string filename) {
@@ -177,7 +198,7 @@ void validate(int num_workers, std::string filename) {
   for(int i = 0; i < num_workers; i ++) {
     command = "valsort -o " + filename + std::to_string(i) + ".sum " + filename + std::to_string(i) + ".dat";
     system(command.c_str());
-    cat += filename + std::to_string(i) + ".sum "
+    cat += filename + std::to_string(i) + ".sum ";
   }
   command = "cat " + cat + "> all.sum";
   system(command.c_str());
@@ -191,12 +212,15 @@ void test_partitions(int * sorted_data, int n, std::vector<int> partitions) {
     int p_index = 0;
     int p_size = partitions.size() + 1;
     std::cout << "SIZE " << p_size << " " << partitions.size() << std::endl;
+    for(int i = 0; i < partitions.size(); i ++) printf("%i ", partitions[i]);
+    std::cout << std::endl;
     int * count = new int[p_size]; 
     for(int i = 0; i < p_size; i ++) count[i] = 0;
     for(int i = 0; i < n; i ++) {
       while(sorted_data[i] > partitions[p_index] && p_index < partitions.size()) {
         p_index++;
       }
+      printf("Less than %i\n", sorted_data[i]);
       count[p_index]++;
     }
     std::cout << "PARTITION COUNTS " << std::endl;
@@ -206,11 +230,12 @@ void test_partitions(int * sorted_data, int n, std::vector<int> partitions) {
 int main () {
 
   /* PARAMETERS */
-  int num_records = 1000000;
   int num_workers = omp_get_max_threads();
-  int num_samples = 10000;
+  int num_samples = num_workers * 10;
+  int num_records = num_workers * 100;
   int num_partitions = num_workers;
   std::string filename = "file";
+  std::string outfile = "outfile";
  
   /* USE GENSORT TO GENERATE INPUT DATA*/
   call_generate_input_data(num_records, filename, num_workers);
@@ -230,16 +255,22 @@ int main () {
   int records_per_worker = num_records/num_workers + 1;
   output_ranges(partitions, filename, records_per_worker);
 
+  /* SORT DATA */
+  sort_ranges(num_workers, filename, outfile);
+
+  /* RUN VALSORT TO VALIDATE SORT */
+
+
   duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
   std::cout<<"printf: "<< duration <<'\n';
 
 
   /* TESTS */
-  printf("\n\n ---------------------------------------------------\n TEST DATA \n ---------------------------------------------------\n");
-  int * data = new int[num_records];
-  read_file(data, filename + "0", num_records);
-  std::sort(data, data + num_records);
-  test_partitions(data, num_records, partitions);
+  //printf("\n\n ---------------------------------------------------\n TEST DATA \n ---------------------------------------------------\n");
+  //int * data = new int[num_records];
+  //read_file(data, filename + "0", num_records);
+  //std::sort(data, data + num_records);
+  //test_partitions(data, num_records, partitions);
 
 
   return 0;

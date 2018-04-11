@@ -2,6 +2,7 @@
 #include <iostream>     // std::cout
 #include <fstream>      // std::ifstream
 #include <cmath>
+#include <sstream>
 
 
 void read_gensort(int arr[], int n, std::string filename) {
@@ -37,6 +38,22 @@ void read_gensort(int arr[], int n, std::string filename) {
 
     //delete[] buffer;
   }
+}
+
+
+std::vector<int> read_txt(std::string filename) {
+  std::vector<int> out;
+  std::ifstream file(filename,std::ios::in);
+  if (file.good()) {
+    std::string str;
+    while(getline(file, str)) {
+      std::istringstream ss(str);
+      int num;
+      ss >> num;
+      out.push_back(num);
+    }
+  }
+  return out;
 }
 
 //void write(int * data, std::string filename) {
