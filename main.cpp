@@ -163,12 +163,11 @@ void sort(int *data, int n) {
    std::sort(data, data + n);
 }
 
-void write_output(int *data, int n, int id, std::string outfile) {
-  std::string file = outfile + std::to_string(id);
+void write_output(int *data, int n, int id, std::string file) {
   std::ofstream f;
   f.open(file);
   for(int i = 0; i < n; i ++) {
-    f << data[n] << "\n";
+    f << data[i] << "\n";
   }
   f.close(); 
 }
@@ -188,7 +187,9 @@ void sort_ranges(int num_workers, std::string filename, std::string outfile) {
  
    sort(data, n);
    printf("WORKER %i PROCESSED %i ITEMS\n", i, n);
-   write_output(data, n, i, outfile);
+   for(int i = 0; i < n; i ++) printf("data %i \n", data[i]);
+   std::string out = outfile + std::to_string(i);
+   write_output(data, n, i, out);
  }
 }
 
@@ -198,12 +199,15 @@ void validate(int num_workers, std::string filename) {
   for(int i = 0; i < num_workers; i ++) {
     command = "valsort -o " + filename + std::to_string(i) + ".sum " + filename + std::to_string(i) + ".dat";
     system(command.c_str());
+    std::cout << command << std::endl;
     cat += filename + std::to_string(i) + ".sum ";
   }
   command = "cat " + cat + "> all.sum";
   system(command.c_str());
+  std::cout << command << std::endl;
   command = "valsort -s all.sum";
   system(command.c_str());
+  std::cout << command << std::endl;
 }
     
 
