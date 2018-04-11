@@ -12,8 +12,16 @@
 #include "read.cpp"
 
 
+
+int[][] all_data; 
 // Initial version of full multicore system for sorting
 // binary recoords only 
+
+void load_input_data(int* data, int records_per_worker, std::string filename, int i) {
+
+  std::string file = filename + std::to_string(i); 
+  read_gensort(data, records_per_worker, file);  
+}
 
 
 void generate_input_data(std::string filename, int n, int id){
@@ -74,7 +82,7 @@ void collect_samples(int * data, int * samples, int data_n, int samples_n) {
 /*
 Return vector of range boundary values
 */
-std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num_workers, int num_partitions, std::string filename) {
+std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num_workers, int num_partitions, std::string filename, int[][] all_data) {
    
    int * all_samples = new int[num_samples]; 
 
@@ -91,11 +99,12 @@ std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num
    //for(int i = 0; i < num_workers; i ++) {
      int i = omp_get_thread_num();
      std::string file = filename + std::to_string(i);
-     int * data = new int[records_per_worker];
+     //int * data = new int[records_per_worker];
+     int * data = all_data[i];
      int * samples = new int[samples_per_worker];
  
      // Read the file for the process
-     read_file(data, file, records_per_worker);
+     //read_file(data, file, records_per_worker);
  
      //Collect the samples from the data
      //collect_samples(data, samples, records_per_worker, samples_per_worker);
@@ -124,16 +133,17 @@ std::vector<int> pick_range_boundaries(int num_samples, int num_records, int num
    return partitions;
 }
 
-void output_ranges(std::vector<int> partitions, std::string filename, int records_per_worker) {
+void output_ranges(std::vector<int> partitions, std::string filename, int records_per_worker, int[][] all_data) {
 
  #pragma omp parallel
  {
    int i = omp_get_thread_num();
    std::string file = filename + std::to_string(i);
-   int * data = new int[records_per_worker];
+   //int * data = new int[records_per_worker];
+   int * data = all_data[i];
 
    //Read data (SHOULD NOT HAVE TO DO THIS AGIAN! REMOVE!
-   read_file(data, file, records_per_worker);
+   //read_file(data, file, records_per_worker);
  
 
    // Write data in sepearte partitions to seperate files
@@ -166,8 +176,11 @@ void sort(int *data, int n) {
 void write_output(int *data, int n, int id, std::string file) {
   std::ofstream f;
   f.open(file);
+  //std::ofstream f(file,std::ios::binary);
   for(int i = 0; i < n; i ++) {
     f << data[i] << "\n";
+    //int a[1]={data[i]};
+    //f.write((char*)a,100); 
   }
   f.close(); 
 }
@@ -187,7 +200,7 @@ void sort_ranges(int num_workers, std::string filename, std::string outfile) {
  
    sort(data, n);
    printf("WORKER %i PROCESSED %i ITEMS\n", i, n);
-   for(int i = 0; i < n; i ++) printf("data %i \n", data[i]);
+   //for(int i = 0; i < n; i ++) printf("data %i \n", data[i]);
    std::string out = outfile + std::to_string(i);
    write_output(data, n, i, out);
  }
@@ -235,9 +248,10 @@ int main () {
 
   /* PARAMETERS */
   int num_workers = omp_get_max_threads();
-  int num_samples = num_workers * 10;
-  int num_records = num_workers * 100;
+  int num_samples = num_workers * 1000;
+  int num_records = 10000000;
   int num_partitions = num_workers;
+  all_data = = new int[num_workers][num_records_per_worker];
   std::string filename = "file";
   std::string outfile = "outfile";
  
@@ -249,8 +263,20 @@ int main () {
   double duration;
   start = std::clock();
 
+  /* LOAD DATA*/
+  int num_records_per_worker = num_records/num_workers;
+  #pragma omp parallel 
+  {
+    int i = omp_get_thread_num();
+    load_data(all_data[i], num_records_per_worker, filename); 
+  }
+  
+  double t1 = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
+
   /* COMPUTE PARTITION VALUES */
-  std::vector<int> partitions = pick_range_boundaries(num_samples, num_records, num_workers, num_partitions, filename);
+  std::vector<int> partitions = pick_range_boundaries(num_samples, num_records, num_workers, num_partitions, filename, all_data);
+
+  double t2 = ( std::clock() - start ) / (double) CLOCKS_PER_SEC - t1;
 
   //for(int i = 0; i < partitions.size(); i ++) std::cout << partitions[i] << " ";
   //std::cout << std::endl; 
@@ -259,14 +285,23 @@ int main () {
   int records_per_worker = num_records/num_workers + 1;
   output_ranges(partitions, filename, records_per_worker);
 
+  double t3 = ( std::clock() - start ) / (double) CLOCKS_PER_SEC - t2 - t1;
+ 
   /* SORT DATA */
   sort_ranges(num_workers, filename, outfile);
 
+  double t4 = ( std::clock() - start ) / (double) CLOCKS_PER_SEC - t2 - t1 - t3;
+  
   /* RUN VALSORT TO VALIDATE SORT */
 
 
-  duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
-  std::cout<<"printf: "<< duration <<'\n';
+
+  double t = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
+  std::cout << "LOAD DATA " << t1 <<'\n';
+  std::cout<<  "PARTITION "<< t2 <<'\n';
+  std::cout<<  "RANGE OUT "<< t3 <<'\n';
+  std::cout<<  "SORT      "<< t4 <<'\n';
+  std::cout<<"TOTAL "<< t<<'\n';
 
 
   /* TESTS */
