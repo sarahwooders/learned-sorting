@@ -19,7 +19,7 @@
 void generate_input_data(std::string filename, int n, int id){
     //MAKE SKEWED LATER WITH -s
     std::string command = "./gensort -b" + std::to_string(n*id) + " " + std::to_string(n) + " " + filename + std::to_string(id);
-    std::cout << command << std::endl;
+    //std::cout << command << std::endl;
     system(command.c_str());
 }
 
@@ -164,12 +164,19 @@ void sort(int *data, int n) {
 }
 
 void write_output(int *data, int n, int id, std::string file) {
+
+  /* START TIMER */
+  std::clock_t start;
+  start = std::clock();
+
   std::ofstream f;
   f.open(file);
   for(int i = 0; i < n; i ++) {
     f << data[i] << "\n";
   }
   f.close(); 
+  double duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
+  printf("Took %f to write %i items\n", duration, n);
 }
 
 void sort_ranges(int num_workers, std::string filename, std::string outfile) {
@@ -187,7 +194,6 @@ void sort_ranges(int num_workers, std::string filename, std::string outfile) {
  
    sort(data, n);
    printf("WORKER %i PROCESSED %i ITEMS\n", i, n);
-   for(int i = 0; i < n; i ++) printf("data %i \n", data[i]);
    std::string out = outfile + std::to_string(i);
    write_output(data, n, i, out);
  }
@@ -215,16 +221,14 @@ void test_partitions(int * sorted_data, int n, std::vector<int> partitions) {
 
     int p_index = 0;
     int p_size = partitions.size() + 1;
-    std::cout << "SIZE " << p_size << " " << partitions.size() << std::endl;
-    for(int i = 0; i < partitions.size(); i ++) printf("%i ", partitions[i]);
-    std::cout << std::endl;
+    //std::cout << "SIZE " << p_size << " " << partitions.size() << std::endl;
     int * count = new int[p_size]; 
     for(int i = 0; i < p_size; i ++) count[i] = 0;
     for(int i = 0; i < n; i ++) {
       while(sorted_data[i] > partitions[p_index] && p_index < partitions.size()) {
         p_index++;
       }
-      printf("Less than %i\n", sorted_data[i]);
+      //printf("Less than %i\n", sorted_data[i]);
       count[p_index]++;
     }
     std::cout << "PARTITION COUNTS " << std::endl;
@@ -236,7 +240,7 @@ int main () {
   /* PARAMETERS */
   int num_workers = omp_get_max_threads();
   int num_samples = num_workers * 10;
-  int num_records = num_workers * 100;
+  int num_records = num_workers * 10000;
   int num_partitions = num_workers;
   std::string filename = "file";
   std::string outfile = "outfile";
@@ -248,26 +252,34 @@ int main () {
   std::clock_t start;
   double duration;
   start = std::clock();
+  double t1 = 0;
 
   /* COMPUTE PARTITION VALUES */
   std::vector<int> partitions = pick_range_boundaries(num_samples, num_records, num_workers, num_partitions, filename);
-
+  double t2 = ( std::clock() - start ) / (double) CLOCKS_PER_SEC - t1; 
   //for(int i = 0; i < partitions.size(); i ++) std::cout << partitions[i] << " ";
   //std::cout << std::endl; 
 
+  std::cout<<  "PARTITION "<< t2 <<'\n';
   /* SEPERATE DATA INTO RANGE FILES */
   int records_per_worker = num_records/num_workers + 1;
   output_ranges(partitions, filename, records_per_worker);
+  double t3 = ( std::clock() - start ) / (double) CLOCKS_PER_SEC - t2 - t1;
 
+  std::cout<<  "RANGE OUT "<< t3 <<'\n';
   /* SORT DATA */
   sort_ranges(num_workers, filename, outfile);
+  double t4 = ( std::clock() - start ) / (double) CLOCKS_PER_SEC - t2 - t1 - t3;
 
+  std::cout<<  "SORT      "<< t4 <<'\n';
   /* RUN VALSORT TO VALIDATE SORT */
 
 
   duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
-  std::cout<<"printf: "<< duration <<'\n';
 
+  double t = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
+  printf("Records: %i Samples: %i Workers: %i \n", num_records, num_samples, num_workers);
+  std::cout<<"TOTAL "<< duration <<'\n';
 
   /* TESTS */
   //printf("\n\n ---------------------------------------------------\n TEST DATA \n ---------------------------------------------------\n");
