@@ -3,9 +3,10 @@
 #include <fstream>      // std::ifstream
 #include <cmath>
 #include <sstream>
+#include <vector>
 
 
-void read_gensort(int arr[], int n, std::string filename) {
+void read_gensort(std::vector<int> & arr, int n, std::string filename) {
   std::ifstream is (filename, std::ifstream::binary);
   if (is) {
     //output.open ("gensort.csv");
@@ -37,6 +38,17 @@ void read_gensort(int arr[], int n, std::string filename) {
     //std::cout.write (buffer,length);
 
     //delete[] buffer;
+  }
+}
+
+void read_data(std::vector<std::vector<int> > & data, int num_workers, int n, std::string file) {
+  #pragma omp parallel shared(data)
+  {
+    
+    int i = omp_get_thread_num();
+    std::string filename = file + std::to_string(i);
+    data[i].resize(n);
+    read_gensort(data[i], n, filename);
   }
 }
 
