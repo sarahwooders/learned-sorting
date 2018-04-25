@@ -179,8 +179,11 @@ std::vector<std::vector<std::vector<int> > > output_ranges(std::vector<std::vect
 }
 
 void sort(int *data, int n) {
+  
    //NEED TO DO RANGE PARTITION
+   double start = omp_get_wtime();
    std::sort(data, data + n);
+   printf("Sorting time %f\n", start - omp_get_wtime());
 }
 
 void write_output(int *data, int n, int id, std::string file) {
@@ -220,7 +223,7 @@ void sort_ranges(std::vector<std::vector<std::vector<int> > > & range_partitions
    sort(data, n);
 
    double sort_done = omp_get_wtime();
-   printf("Sorting time: %f\n", sort_done - start);
+   printf("Total sorting time: %f\n", sort_done - start);
    //printf("WORKER %i PROCESSED %i ITEMS\n", i, n);
    std::string out = outfile + std::to_string(i);
    write_output(data, n, i, out);
@@ -269,7 +272,7 @@ int main () {
 
   /* PARAMETERS */
   int num_workers = omp_get_max_threads();
-  int num_samples = num_workers * 1000;
+  int num_samples = num_workers * 10000;
   int num_records = num_workers * 1562500; //10 GB
   int num_records_per_worker = num_records/num_workers;
   int num_partitions = num_workers;
