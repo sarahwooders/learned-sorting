@@ -272,8 +272,8 @@ int main () {
 
   /* PARAMETERS */
   int num_workers = omp_get_max_threads();
-  int num_samples = num_workers * 10000;
-  int num_records = num_workers * 1562500; //10 GB
+  int num_samples = num_workers * 1000;
+  int num_records = num_workers * 156250; //1 GB
   int num_records_per_worker = num_records/num_workers;
   int num_partitions = num_workers;
   std::string filename = "file";
