@@ -20,9 +20,9 @@
 // binary recoords only 
 
 /* PARAMETERS */
-int num_workers = omp_get_max_threads();
-int num_samples = num_workers * 1000;
-int num_records = num_workers * 156250; //1 GB
+int num_workers = 64;//omp_get_max_threads();
+int num_samples = 64 * 1000;
+int num_records = 64 * 156250; //1 GB
 int num_records_per_worker = num_records/num_workers;
 int num_partitions = num_workers;
 std::string filename = "file";
@@ -30,6 +30,8 @@ std::string outfile = "outfile";
  
 int main () {
 
+  /* Set number of threads */
+  omp_set_num_threads(num_workers);
 
   /* USE GENSORT TO GENERATE INPUT DATA*/
   generate_input(num_records, filename, num_workers);
