@@ -8,9 +8,11 @@
 #include <stdlib.h>
 #include <cstdio>
 #include <ctime>
+#include <bitset>
 #include <omp.h>
 #include "read.cpp"
 #include "generate_input.cpp"
+#include "radix/radix.cc"
 
 /* PARAMETERS */
 int num_workers = omp_get_max_threads();
@@ -32,7 +34,15 @@ void generate_random_subset(int * indices, int subset_size, int n) {
   std::random_shuffle(ind, ind + n);
   for(int i = 0; i < subset_size; i ++) indices[i] = ind[i];
 }
-    
+ 
+void sort(int *data, int n) {
+   //NEED TO DO RANGE PARTITION
+   double start = omp_get_wtime();
+   std::sort(data, data + n);
+   //printf("Sorting time %f\n", omp_get_wtime() - start);
+}
+
+   
 
 /*
 Function for selecting random subset of data (DO NOT USE)
@@ -78,18 +88,34 @@ std::vector<int> pick_range_boundaries(std::vector<std::vector<int> > & data, in
    // sort total samples
    __gnu_parallel::sort(all_samples, all_samples + num_samples);
    //std::sort(all_samples, all_samples + num_samples);
-  
 
    // Determine partition values
    std::vector<int> partitions; 
    int partition_size = num_samples/num_partitions;
-   for(int i = partition_size; i < num_samples; i += partition_size) {
-      partitions.push_back(all_samples[i]);
+   for(int x = partition_size; x < num_samples; x += partition_size) {
+      partitions.push_back(all_samples[x]);
    }
    //for(int i = 0; i < partitions.size(); i ++) printf("part %i\n",partitions[i]);
    
    return partitions;
 }
+
+void write_output(int *data, int n, int id, std::string file) {
+
+  /* START TIMER */
+  std::clock_t start;
+  start = std::clock();
+
+  std::ofstream f;
+  f.open(file);
+  for(int i = 0; i < n; i ++) {
+    f << data[i] << "\n";
+  }
+  f.close(); 
+  double duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
+  //printf("Took %f to write %i items\n", duration, n);
+}
+
 
 int binarySearch(std::vector<int> & arr, int x)
 {
@@ -141,7 +167,10 @@ std::vector<std::vector<std::vector<int> > > output_ranges(std::vector<std::vect
  std::vector<std::vector<std::vector<int> > > range_partitions;
  range_partitions.resize(num_workers);
 
- for(auto& v : range_partitions) v.resize(num_files);
+
+ for(auto& v : range_partitions) {
+   v.resize(num_files);
+ }
 
  #pragma omp parallel shared(range_partitions)
  {
@@ -162,18 +191,36 @@ std::vector<std::vector<std::vector<int> > > output_ranges(std::vector<std::vect
   double duration;
   start = std::clock();
 
+  int n = data[i].size();
+  int * wdata = &data[i][0];
+
   std::vector<std::vector<int> > v;
   v.resize(num_files);
+  //sort(wdata, n);
+  radix_sort(wdata, 0, n, 24, 9);
+
+  //std::string inter_filename ="inter" + std::to_string(i);
+  //std::ofstream f;
+  //f.open(inter_filename);
+  //for(int i = 0; i < n; i ++) {
+  //  f << std::bitset<32>(wdata[i]).to_string() << " " << wdata[i] << "\n";
+  //}
+  //f.close();
+
+  int index = 0;
   
    for(int j = 0; j < records_per_worker; j ++) {
 
-     int index = binarySearch(partitions, data[i][j]);
+     //int index = binarySearch(partitions, data[i][j]);
      //printf("Search: index %i data %i\n", index, data[i][j]);
      //while(index < partitions.size() && partitions[index] < data[i][j]) { //CAN BE MADE FASTER (binary search) 
      //  index ++;
      //}
 
-     v[index].push_back(data[i][j]); 
+     while(wdata[j] >= partitions[index] && index < partitions.size()) {
+        index ++;
+      }
+     v[index].push_back(wdata[j]); 
    }
     double t2 = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
     //printf("loop time %f \n", t2);
@@ -187,29 +234,56 @@ std::vector<std::vector<std::vector<int> > > output_ranges(std::vector<std::vect
 
   return range_partitions;
 }
+//void sort_ranges(std::vector<std::vector<std::vector<int> > > & range_partitions, int num_workers, std::string filename, std::string outfile) {
+//
+// for(int a  = 0; a < range_partitions.size(); a ++) {
+//   printf("\n Worker %i \n", a);
+//   for(int b = 0; b < range_partitions[a].size(); b ++) {
+//     printf(" %i", range_partitions[a][b].size());
+//   }
+// }
+// #pragma omp parallel
+// {
+//   
+//   double start = omp_get_wtime();
+//   int i = omp_get_thread_num();
+//
+//   std::string out = outfile + std::to_string(i);
+//   //std::ofstream f;
+//   //f.open(out);
+//
+//
+//   std::priority_queue<std::pair<int, int> > q;
+//   int indices[num_workers];
+//   std::vector<int> data_vec;
+//   for(int x = 0; x < num_workers; x ++) {
+//      indices[x] = 0;
+//      if(indices[x] < range_partitions[x][i].size()) {
+//        q.push(std::make_pair(range_partitions[x][i][0], x));
+//      }
+//   }
+//   int max_size = 0;
+//   int data_count = 0;
+//   while(!q.empty()) {
+//      std::pair<int,int> p = q.top();
+//      data_count ++;
+//      if(q.size() > max_size) max_size = q.size();
+//      q.pop();
+//      int val = p.first;
+//      //f << val << "\n";
+//      int worker = p.second;
+//      indices[worker]++;
+//      if(indices[worker] < range_partitions[worker][i].size()){
+//        q.push(std::make_pair(range_partitions[worker][i][indices[worker]], worker));
+//      }
+//   }
+//   //f.close();
+//   double end = omp_get_wtime();
+//   printf("Write time: %f \n", end - start);
+//   printf("Data : %i %i \n", max_size, data_count);
+// }
+//}
 
-void sort(int *data, int n) {
-   //NEED TO DO RANGE PARTITION
-   double start = omp_get_wtime();
-   std::sort(data, data + n);
-   printf("Sorting time %f\n", start - omp_get_wtime());
-}
-
-void write_output(int *data, int n, int id, std::string file) {
-
-  /* START TIMER */
-  std::clock_t start;
-  start = std::clock();
-
-  std::ofstream f;
-  f.open(file);
-  for(int i = 0; i < n; i ++) {
-    f << data[i] << "\n";
-  }
-  f.close(); 
-  double duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
-  //printf("Took %f to write %i items\n", duration, n);
-}
 
 void sort_ranges(std::vector<std::vector<std::vector<int> > > & range_partitions, int num_workers, std::string filename, std::string outfile) {
  #pragma omp parallel
@@ -230,14 +304,14 @@ void sort_ranges(std::vector<std::vector<std::vector<int> > > & range_partitions
    int * data = &data_vec[0];
  
    sort(data, n);
-
+   //radix_sort(data, 0, n, 24, 0);
    double sort_done = omp_get_wtime();
-   printf("Total sorting time: %f\n", sort_done - start);
+   printf("Thread %i data size %i total sorting time: %f\n", i, data_vec.size(), sort_done - start);
    //printf("WORKER %i PROCESSED %i ITEMS\n", i, n);
    std::string out = outfile + std::to_string(i);
    write_output(data, n, i, out);
    double writing_done = omp_get_wtime();
-   printf("Write time: %f \n", writing_done - sort_done);
+   //printf("Write time: %f \n", writing_done - sort_done);
  }
 }
 
@@ -309,7 +383,7 @@ void collect_and_sort_ranges(std::vector<std::vector<int> > & data, std::vector<
   int n = worker_data.size();
   int * wdata = &worker_data[0];
   sort(wdata, n);
-
+  //radix_sort(wdata, 0, n, 24, 22);
   double sort_done = omp_get_wtime();
   //printf("WORKER %i PROCESSED %i ITEMS\n", i, n);
   std::string out = outfile + std::to_string(i);
@@ -350,39 +424,27 @@ int main () {
   //std::cout << std::endl; 
   std::cout<<  "SAMPLE AND PICK RANGES "<< t2 <<'\n';
 
-  collect_and_sort_ranges(data, partitions);
 
-  ///* SEPERATE DATA INTO RANGE FILES */
-  //int records_per_worker = num_records/num_workers + 1;
-  //std::vector<std::vector<std::vector<int> > > range_partitions = output_ranges(data, partitions, filename, records_per_worker);
-  //double t3 = omp_get_wtime() - t2 - t1 - start;
-  ////for(int i = 0; i < range_partitions.size(); i ++) {
-  ////  std::cout << "WORKER" << i << std::endl;
-  ////  for(int j = 0; j < range_partitions[i].size(); j ++) {
-  ////    std::cout << "PARTITION " << j << std::endl;
-  ////    for(int k = 0; k < range_partitions[i][j].size(); k ++) {
-  ////         std::cout << range_partitions[i][j][k] << " ";
-  ////    }
-  ////    std::cout << std::endl;
-  ////  }
-  ////  std::cout << std::endl;
-  ////}
-  //std::cout<<  "DIVIDE DATA INTO RANGES "<< t3 <<'\n';  
+  /* SEPERATE DATA INTO RANGE FILES */
+  int records_per_worker = num_records/num_workers + 1;
+  std::vector<std::vector<std::vector<int> > > range_partitions = output_ranges(data, partitions, filename, records_per_worker);
+  double t3 = omp_get_wtime() - t2 - t1 - start;
+  std::cout<<  "DIVIDE DATA INTO RANGES "<< t3 <<'\n';  
 
-  ///* SORT DATA */
-  //sort_ranges(range_partitions, num_workers, filename, outfile);
-  //double t4 = omp_get_wtime() - t2 - t3 - t1 - start;
+  /* SORT DATA */
+  sort_ranges(range_partitions, num_workers, filename, outfile);
+  double t4 = omp_get_wtime() - t2 - t3 - t1 - start;
 
-  //std::cout<<  "SORT AND WRITE OUTPUT "<< t4 <<'\n';
-  ///* RUN VALSORT TO VALIDATE SORT */
+  std::cout<<  "SORT AND WRITE OUTPUT "<< t4 <<'\n';
+  /* RUN VALSORT TO VALIDATE SORT */
 
 
 
-  //double t = omp_get_wtime() - start;
-  //printf("Records: %i Samples: %i Workers: %i \n", num_records, num_samples, num_workers);
-  //std::cout<<"TOTAL "<< t <<'\n';
-
-  /* TESTS */
+  double t = omp_get_wtime() - start;
+  printf("Records: %i Samples: %i Workers: %i \n", num_records, num_samples, num_workers);
+  std::cout<<"TOTAL "<< t <<'\n';
+  std::cout << "data size " << sizeof(int) << '\n';
+  // TESTS */
   //printf("\n\n ---------------------------------------------------\n TEST DATA \n ---------------------------------------------------\n");
   //int * data = new int[num_records];
   //read_file(data, filename + "0", num_records);
