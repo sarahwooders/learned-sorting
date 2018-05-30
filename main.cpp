@@ -73,6 +73,7 @@ int main () {
   double t = omp_get_wtime() - start;
   printf("Records: %i Samples: %i Workers: %i \n", num_records, num_samples, num_workers);
   std::cout<<"TOTAL "<< t <<'\n';
+  std::cout << "Total without data reads" << (t -t1) << std::endl;
   std::cout << "data size " << sizeof(int) << '\n';
   // TESTS */
   //printf("\n\n ---------------------------------------------------\n TEST DATA \n ---------------------------------------------------\n");
