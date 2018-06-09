@@ -20,9 +20,9 @@
 // binary recoords only 
 
 /* PARAMETERS */
-int num_workers = 64;//omp_get_max_threads();
-int num_samples = 64 * 1000;
-int num_records = 64 * 156250; //1 GB
+int num_workers = 1;//omp_get_max_threads();
+int num_samples = 1 * 1000;
+int num_records = 1 * 156250; //1 GB
 int num_records_per_worker = num_records/num_workers;
 int num_partitions = num_workers;
 std::string filename = "file";
